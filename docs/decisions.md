@@ -1,77 +1,99 @@
-# RouteRelay — Architectural decisions
+# Decisions — MetroResolve
 
-## D1. Web application, not Android
+## D1. Web app, not Android
 
-**Decision:** React + Vite + TypeScript PWA, not a native Android app.
-**Reasons:** event is ~2 hours, solo; web needs no SDK, emulator,
-device signing, or install friction; judges can open a URL (and
-airplane mode works identically). Android tooling would consume
-the entire budget before any feature exists.
-**Revisit if:** the announced challenge explicitly requires a
-native/on-device app or hardware sensors.
+The event allows ~2 hours, permits airplane mode, and
+judges use a browser. A web app needs no toolchain, no
+device, no install, and its offline story (service worker
++ localStorage) covers the demo. Android would spend the
+entire budget on environment setup. *Provisional only if
+the organizers mandate a native app.*
 
-## D2. Core workflow must not depend on an API
+## D2. The core workflow must not depend on any API
 
-**Decision:** all data is bundled JSON imported at build time;
-the app has no fetch calls in its critical path.
-**Reasons:** connectivity is intermittent and judges may enable
-airplane mode; a demo that dies offline fails the event.
-Bundling also removes CORS, auth, and server-ops work.
-**Revisit if:** the challenge *requires* live data — then the
-architecture gains a clearly-labelled optional sync layer, with
-offline still the default.
+Connectivity is intermittent and may be cut during the
+demo. Every core operation — shell render, data load,
+classification, urgency, drafting, persistence — runs
+from bundled JSON and localStorage with zero network
+requests. Sync is an optional overlay, not a dependency.
 
-## D3. Simulated incidents must be visibly labelled
+## D3. Deterministic rule-based classifier is the primary engine
 
-**Decision:** a persistent DEMO MODE badge, "Data: local ·
-synthetic" pill, per-scenario "simulated" status, and a footer
-provenance line.
-**Reasons:** presenting synthetic data as real is dishonest and
-could mislead a judge or passenger; visible labels are cheap and
-build trust.
-**Revisit if:** real, sourced data replaces the demo dataset —
-then labels must switch to the real provenance, not disappear.
+A keyword/script heuristic is explainable (every
+classification lists its matched signals), testable
+(12/12 sample expectations are pinned), dependency-free,
+and instant. A model would be a black box with a
+installation risk. The rules are configurable
+(`URGENCY_RULES` in `src/lib/nlp.ts`).
 
-## D4. No speculative ETAs or replacement transport as verified
+## D4. Simulated incidents/complaints are visibly labelled
 
-**Decision:** durations are either sourced (`durationSource`
-field) or `null`; the UI never invents journey times, bus
-availability, or rideability.
-**Reasons:** unverified ETAs can cause real harm (missed rides,
-wrong expectations); a hackathon demo gains nothing from fake
-precision.
-**Revisit if:** authoritative data (official GTFS/operator feed)
-is supplied — then each value carries its source and the UI
-distinguishes verified vs estimated per edge.
+All bundled data is synthetic. The footer states it,
+sample IDs are `SAMPLE-*`, and the notice banner reports
+synthetic provenance. This is deliberate: judges must
+never mistake demo data for live metro data.
 
-## D5. Hand-rolled service worker over vite-plugin-pwa
+## D5. Speculative ETAs, drafts, and scores are never presented as verified
 
-**Decision:** ~50-line SW with cache-first + network fallback,
-precaching only `/` and `/index.html`.
-**Reasons:** fewest dependencies and failure modes; hashed assets
-are cached on first load via the fetch handler, which is enough
-for a small single-page app.
-**Revisit if:** the app grows (many routes, large assets) — then
-a precache manifest (vite-plugin-pwa) becomes worth the dependency.
+Urgency scores carry the label "prototype decision
+support — not official operational severity ratings".
+Reply drafts carry "DRAFT — not sent, not approved".
+"Synced" appears only after a real 2xx server
+acknowledgement (`acknowledgedAt`). Language detection
+reports a confidence and an honest note when romanized
+Gujlish/Hinglish is indistinguishable from English.
 
-## D6. localStorage with graceful degradation
+## D6. Optional local Ollama adapter — off by default, never blocking
 
-**Decision:** tiny `storage` wrapper that probes availability and
-falls back to an in-memory map.
-**Reasons:** private mode / quota / disabled storage must never
-crash the demo; session-only persistence is an acceptable降级.
-(Redundancy note: "degradation" intended, mixed-language slip —
-read as "acceptable degradation".)
-**Revisit if:** P1 adds complex state — then consider a small
-state library, but only with a concrete need.
+If `gemma4:e2b` were installed, the adapter could improve
+classification/drafting. It is not installed here (verified
+live), so it ships disabled. Design rules: localhost only
+(no cloud AI, no complaint data leaves the device),
+timeout-bounded, any failure falls back to the rule-based
+engine without blocking the user, and the rule-based
+path always remains available. Do not pull models during
+the event.
 
-## D7. Provisional until the challenge is announced
+## D7. Sync semantics: idempotent, retrying, honest
 
-**Decision:** the entire product concept (journey recovery,
-station graph, incident workflow) is a *candidate*, held in
-`docs/idea-patterns.md` as one of six patterns.
-**Reasons:** the actual challenge may match a different pattern;
-keeping the starter generic (local JSON, local persistence,
-offline shell) maximizes adaptability.
-**Revisit:** immediately upon announcement — see the Hackathon
-Start Procedure in README.md.
+POST per case with `Idempotency-Key: <case.id>` so a
+retry can never duplicate a record server-side (the
+endpoint must honour the header). Network errors, 429,
+and 5xx retry with backoff up to `maxAttempts`; other
+4xx fail permanently (retrying cannot fix them). Failures
+keep the record local in the outbox; JSON export is the
+no-endpoint sharing path. Without a configured endpoint
+the app says so and retains everything locally.
+
+## D8. Department model is orthogonal to urgency
+
+Department = *who* handles it (keyword classification).
+Urgency = *when* (independent rule set). A Cleanliness
+complaint can be urgent; a Safety complaint can be low.
+This avoids conflating routing with priority and keeps
+both dimensions explainable.
+
+## D9. localStorage over IndexedDB
+
+Demo-scale data (tens to hundreds of cases) fits
+localStorage comfortably; the safe wrapper degrades to
+in-memory if storage is unavailable. IndexedDB is listed
+as P2.5 if queue size ever demands it.
+
+## D10. Service worker: minimal and versioned
+
+A single cache-first worker (`metroresolve-shell-v1`)
+for the app shell and static assets — the smallest
+reliable offline strategy, no stale-while-revalidate
+complexity. Registered in production only, so dev
+reflects source truth.
+
+## Provisional until organizers confirm
+
+- Department list and urgency rubric (D3/D8) — replace
+  if a official rubric is published.
+- Sync endpoint (D7) — configure when/if one exists.
+- Language set (D5) — extend lexicons if more languages
+  are required.
+- Demo dataset stations (generic names, not the real
+  network) — swap for sourced data if provided.

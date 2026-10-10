@@ -1,81 +1,146 @@
-# RouteRelay
+# MetroResolve
 
-Offline-first metro journey-recovery web app — **hackathon
-preparation starter**. Currently a working shell with synthetic
-demo data; the route-calculation engine is not implemented yet
-(see `docs/tasks.md`, P1).
+**PS-07: Every Complaint Heard — Metro Operations.**
+Offline-first complaint triage for a station controller.
+Complaints arrive in Gujarati, Hindi, English, and mixed
+Gujlish/Hinglish. MetroResolve classifies each complaint
+into one of five department queues (Safety, Cleanliness,
+Fare, Lifts, Staff Behaviour), scores urgency with visible
+reasons, drafts an editable reply in the detected language,
+and stores everything locally. It works fully offline after
+first load and syncs through a configurable HTTP endpoint
+when one is provided.
 
-> All network data is **synthetic demo data** — not live, not
-> verified, not a real-world transport authority's information.
+> All bundled complaint data is **synthetic demo data**.
+> Language detection, classification, and urgency scores
+> are **prototype decision support** — not verified
+> translations and not official operational severity
+> ratings. Drafts are never sent or approved by this app.
 
 ## Quickstart
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm run build      # typecheck + production build → dist/
+npm run build      # TypeScript check + production build → dist/
 npm run preview    # serve the production build → http://localhost:4173
 ```
 
-## What works today (verified at preparation time)
+## What works (verified — see docs/final-report.md)
 
-- Responsive app shell: DEMO MODE badge, data-status pills
-  (local/synthetic, live not connected, storage state).
-- Incident + destination selectors populated from bundled JSON.
-- Route-recovery results placeholder + friendly empty state.
-- Selection persists across refresh (localStorage, with
-  in-memory fallback).
-- Minimal service worker: after first online load, the shell
-  renders from cache (airplane-mode capable). Manual browser
-  test still required — see `docs/validation.md` M6–M7.
+- Operations dashboard: total complaints, pending cases,
+  urgent cases, server-acknowledged count.
+- Local batch of 12 clearly labelled synthetic complaints
+  covering English, Hindi, Gujarati, Gujlish and Hinglish,
+  seeded on first launch.
+- Manual complaint entry (any supported language) and
+  one-click loading of any sample.
+- Deterministic rule-based classification into the five
+  departments, with matched keywords visible per case.
+- Urgency score (0–100) with per-rule reasons and band
+  (urgent ≥ 65, high ≥ 40, normal ≥ 20, low < 20).
+- Editable response draft in the detected language
+  (Gujarati/Hindi/English templates; Gujlish/Hinglish get
+  the English template with an explicit note).
+- Department queue filters; urgency-first ordering.
+- localStorage persistence across reloads; graceful
+  fallback if storage is unavailable.
+- Online/offline indicator; local outbox of unsynced
+  records; JSON export.
+- Sync adapter: configurable endpoint, `Idempotency-Key`
+  per case (server-side dedupe), retries with backoff for
+  network errors/429/5xx, permanent failure on other 4xx.
+  "Synced" is shown only after a real 2xx acknowledgement.
+- Optional local Ollama adapter (localhost only, off by
+  default). The rule-based engine remains active always.
+- Service worker caches the app shell; after one online
+  load the app renders with the network disabled.
 
-## Project structure
+## Architecture note
 
 ```
-src/App.tsx            shell UI
+src/App.tsx            dashboard, queues, detail panel, sync UI
 src/main.tsx           mount + production-only SW registration
-src/lib/data.ts        typed accessors over bundled JSON
-src/lib/storage.ts     safe localStorage wrapper
-src/data/network.json  synthetic demo network + scenarios
-public/sw.js           minimal service worker
-docs/                  requirements, design, tasks, validation,
-                       decisions, idea-patterns
+src/lib/nlp.ts         language detection, department classifier,
+                       urgency rules, reply templates
+src/lib/cases.ts       CaseRecord model, factory, id sequence
+src/lib/storage.ts     safe localStorage wrapper (JSON + fallback)
+src/lib/sync.ts        HTTP sync adapter (idempotent, retrying)
+src/lib/ollama.ts      optional local Ollama inference adapter
+src/lib/data.ts        RouteRelay-era accessor (unused, kept)
+src/data/complaints.json  12 synthetic complaints + stations/channels
+src/data/network.json     RouteRelay-era demo data (unused, kept)
+public/sw.js           shell cache service worker (metroresolve-shell-v1)
 ```
 
-## Before the demo
+Data flows: bundled JSON → deterministic classifier →
+CaseRecord → localStorage (single source of truth) → UI.
+Sync is an overlay: records stay local until a configured
+endpoint acknowledges them. No network request is needed to
+render the shell, load data, classify, triage, or persist.
 
-1. Read `docs/validation.md` and run every check.
-2. Confirm the airplane-mode reload test (M7) passes in the
-   actual demo machine/browser.
-3. Update the one-line pitch to describe **only** what works.
+## Offline test (production build)
 
-## Hackathon Start Procedure
+```bash
+npm run build && npm run preview
+# 1. Open http://localhost:4173 once while online (SW caches the shell).
+# 2. Chrome DevTools → Application → Service Workers → "Offline" ticked,
+#    or Network → "Offline" checkbox.
+# 3. Hard-reload (Ctrl/Cmd+Shift+R). The dashboard, all 12+ cases,
+#    triage, editing, and local save must all still work.
+# 4. The header must show "Offline" and the unsynced-record count.
+```
 
-1. **Inspect the announcement.** Underline the intended user,
-   the operational problem, and any required deliverables.
-2. **Map it.** Use the keyword table in `docs/idea-patterns.md`
-   to pick the closest pattern — or decide the patterns don't
-   fit and start fresh on the generic shell.
-3. **Re-scope the docs first.** Update `docs/requirements.md`
-   (problem, user, MVP, acceptance), `docs/design.md` (data
-   schema, workflow), `docs/tasks.md` (P0 for the new scope),
-   and `docs/validation.md` (what "done" means).
-4. **Update the task list.** Check off nothing that isn't
-   verified; move the new P0 to the top.
-5. **Build the smallest viable solution:** one complete
-   end-to-end workflow, running fully offline from bundled
-   data. Only then add secondary features.
-6. **Keep honesty visible:** DEMO MODE badge and synthetic-data
-   labels stay unless/until real sourced data replaces them.
+An automated CDP harness (33 checks) was used during
+development; see `docs/validation.md`.
+
+## Demo script (≈3 minutes)
+
+1. Dashboard shows 12 complaints, 12 pending, 4 urgent.
+2. Click **SAMPLE-03** — Gujarati lift complaint: Lifts,
+   urgency 70 (URGENT), reasons "person trapped" +
+   "urgent language", Gujarati draft labelled
+   "DRAFT — not sent, not approved".
+3. Add a manual Gujarati complaint → MR-0001, classified
+   Lifts, urgency 60, appears in the queue.
+4. Edit the draft, "Save response locally" — marked
+   unsynced, outbox count increments.
+5. Hard-reload — the case and edited draft persist.
+6. DevTools Offline → hard-reload — everything still works.
+7. Export JSON — downloads all cases.
+
+## Assumptions
+
+- Complaint text is synthetic; no real passenger data.
+- Language detection is a script/lexicon heuristic —
+  fully romanized Gujlish/Hinglish is indistinguishable
+  from English by design (see docs/decisions.md).
+- Urgency rules are configurable in `src/lib/nlp.ts`
+  (`URGENCY_RULES`); scores are decision support only.
+- A real sync endpoint must deduplicate on the
+  `Idempotency-Key` header; no endpoint is configured
+  out of the box, so records are retained locally and
+  JSON export is the sharing path.
+- First load must be online once so the service worker
+  can cache the shell; every subsequent load works offline.
+- Ollama adapter is optional and off by default; the
+  expected model (`gemma4:e2b`) is not installed in this
+  environment, so the rule-based engine is the active one.
 
 ## GitHub (not yet pushed)
 
-The repository is prepared locally with a baseline commit.
-When internet is available:
+The repository is prepared locally with baseline commits on
+`main`. When internet is available:
 
 ```bash
-gh repo create RouteRelay --public --source=. --remote=origin --push
+gh repo create metroresolve --public --source=. --remote=origin --push
 ```
 
-See the final preparation report (or ask the agent) for status
-checks, milestone commits, and push-recovery commands.
+## Project docs
+
+- `docs/requirements.md` — problem, user, scope, acceptance
+- `docs/design.md` — architecture and data model
+- `docs/tasks.md` — prioritized task list (P0 done)
+- `docs/validation.md` — test procedures
+- `docs/decisions.md` — architectural decisions and reasons
+- `docs/final-report.md` — tested / untested / limitations

@@ -1,125 +1,737 @@
-import { useEffect, useMemo, useState } from 'react';
-import { getMeta, getScenarios, getStations } from './lib/data';
-import { storage } from './lib/storage';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  DEPARTMENTS,
+  LANGUAGE_LABELS,
+  type Department,
+} from './lib/nlp';
+import {
+  createCase,
+  finalizeCase,
+  nextCaseId,
+  type CaseRecord,
+  type CaseStatus,
+} from './lib/cases';
+import { getJSON, setJSON, storage } from './lib/storage';
+import {
+  DEFAULT_SYNC_CONFIG,
+  syncCase,
+  type SyncConfig,
+} from './lib/sync';
+import { checkOllama, triageWithOllama, type OllamaStatus } from './lib/ollama';
+import sampleData from './data/complaints.json';
 
-const SCENARIO_KEY = 'routerelay:scenario';
-const DESTINATION_KEY = 'routerelay:destination';
+const CASES_KEY = 'metroresolve:cases';
+const CONFIG_KEY = 'metroresolve:config';
+
+interface SampleComplaint {
+  id: string;
+  sourceText: string;
+  channel: string;
+  station: string;
+}
+
+const SAMPLES = sampleData.complaints as unknown as SampleComplaint[];
+const STATIONS = sampleData.stations as unknown as string[];
+const CHANNELS = sampleData.channels as unknown as string[];
+
+const BAND_CLASS: Record<string, string> = {
+  urgent: 'band-urgent',
+  high: 'band-high',
+  normal: 'band-normal',
+  low: 'band-low',
+};
 
 export default function App() {
-  const meta = useMemo(() => getMeta(), []);
-  const scenarios = useMemo(() => getScenarios(), []);
-  const stations = useMemo(() => getStations(), []);
+  // Lazy init: reload restores the persisted queue (offline-safe).
+  const [cases, setCases] = useState<CaseRecord[]>(() =>
+    getJSON<CaseRecord[]>(CASES_KEY, []),
+  );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Department | 'All'>('All');
+  const [config, setConfig] = useState<SyncConfig>(() =>
+    getJSON(CONFIG_KEY, DEFAULT_SYNC_CONFIG),
+  );
+  const [online, setOnline] = useState<boolean>(navigator.onLine);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [form, setForm] = useState({
+    sourceText: '',
+    channel: 'app',
+    station: STATIONS[0],
+  });
+  const [ollama, setOllama] = useState({
+    enabled: false,
+    model: 'gemma4:e2b',
+    status: null as OllamaStatus | null,
+    checking: false,
+  });
 
-  const [scenarioId, setScenarioId] = useState<string>(() =>
-    storage.get(SCENARIO_KEY) ?? '',
-  );
-  const [destinationId, setDestinationId] = useState<string>(() =>
-    storage.get(DESTINATION_KEY) ?? '',
-  );
+  // --- seed the queue with the synthetic sample batch (first launch only)
+  useEffect(() => {
+    if (storage.get(CASES_KEY) === null) {
+      const seeded = SAMPLES.map((s) =>
+        finalizeCase(
+          Object.assign(
+            createCase({
+              sourceText: s.sourceText,
+              channel: s.channel,
+              station: s.station,
+              origin: 'sample-batch',
+            }),
+            { id: s.id },
+          ),
+        ),
+      );
+      setCases(seeded);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // --- persistence
+  useEffect(() => {
+    setJSON(CASES_KEY, cases);
+  }, [cases]);
 
   useEffect(() => {
-    if (scenarioId) storage.set(SCENARIO_KEY, scenarioId);
-    else storage.remove(SCENARIO_KEY);
-  }, [scenarioId]);
+    setJSON(CONFIG_KEY, config);
+  }, [config]);
 
+  // --- online/offline indicator
   useEffect(() => {
-    if (destinationId) storage.set(DESTINATION_KEY, destinationId);
-    else storage.remove(DESTINATION_KEY);
-  }, [destinationId]);
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, []);
 
-  const scenario = scenarios.find((s) => s.id === scenarioId);
-  const destination = stations.find((s) => s.id === destinationId);
+  const unsyncedCount = cases.filter((c) => c.syncStatus !== 'synced').length;
+  const stats = useMemo(
+    () => ({
+      total: cases.length,
+      pending: cases.filter((c) => c.status === 'pending').length,
+      urgent: cases.filter((c) => c.urgencyBand === 'urgent').length,
+      synced: cases.filter((c) => c.syncStatus === 'synced').length,
+    }),
+    [cases],
+  );
+
+  const visibleCases = useMemo(() => {
+    const filtered =
+      filter === 'All' ? cases : cases.filter((c) => c.department === filter);
+    return [...filtered].sort(
+      (a, b) => b.urgencyScore - a.urgencyScore || b.createdAt.localeCompare(a.createdAt),
+    );
+  }, [cases, filter]);
+
+  const selected = cases.find((c) => c.id === selectedId) ?? null;
+
+  // --- actions
+  const addManualCase = useCallback(async () => {
+    if (!form.sourceText.trim()) return;
+    const record = createCase({
+      sourceText: form.sourceText,
+      channel: form.channel,
+      station: form.station,
+      origin: 'manual',
+    });
+    record.id = nextCaseId(cases);
+
+    let aiNote: string | undefined;
+    if (ollama.enabled && ollama.status?.modelInstalled) {
+      try {
+        const t = await triageWithOllama(record.sourceText, ollama.model, config.timeoutMs);
+        if (t.department && DEPARTMENTS.includes(t.department as Department)) {
+          record.department = t.department as Department;
+        }
+        if (typeof t.urgency === 'number') {
+          record.urgencyScore = t.urgency;
+          record.urgencyBand =
+            t.urgency >= 65 ? 'urgent' : t.urgency >= 40 ? 'high' : t.urgency >= 20 ? 'normal' : 'low';
+        }
+        if (t.reasons?.length) {
+          record.urgencyReasons = [
+            ...record.urgencyReasons,
+            ...t.reasons.map((r, i) => ({ ruleId: `ollama-${i}`, description: r, points: 0 })),
+          ];
+        }
+        if (t.draft) {
+          record.responseDraft = t.draft;
+          record.responseNote = 'Draft generated by the local model — editable, not sent.';
+        }
+        aiNote = `Local model (${ollama.model}) assisted this triage; rule-based reasons are retained below.`;
+      } catch {
+        aiNote = 'Local model unavailable (timeout/error) — rule-based fallback used.';
+      }
+    }
+
+    const final = finalizeCase(record);
+    if (aiNote) final.aiNote = aiNote;
+    setCases((prev) => [final, ...prev]);
+    setSelectedId(final.id);
+    setForm({ sourceText: '', channel: 'app', station: STATIONS[0] });
+    setNotice(
+      `Case ${final.id} created locally — ${final.department}, urgency ${final.urgencyScore} (${final.urgencyBand}). Marked unsynced.`,
+    );
+  }, [form, cases, ollama, config]);
+
+  const addSample = useCallback(
+    (s: SampleComplaint) => {
+      const record = createCase({
+        sourceText: s.sourceText,
+        channel: s.channel,
+        station: s.station,
+        origin: 'sample-batch',
+      });
+      record.id = nextCaseId(cases);
+      const final = finalizeCase(record);
+      setCases((prev) => [final, ...prev]);
+      setSelectedId(final.id);
+      setNotice(`Sample complaint added as case ${final.id}.`);
+    },
+    [cases],
+  );
+
+  const updateCase = useCallback((id: string, patch: Partial<CaseRecord>) => {
+    setCases((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? {
+              ...c,
+              ...patch,
+              updatedAt: new Date().toISOString(),
+              syncStatus: 'pending', // local change → back in the outbox
+            }
+          : c,
+      ),
+    );
+  }, []);
+
+  const syncAll = useCallback(async () => {
+    if (!config.endpoint) {
+      setNotice(
+        `No sync endpoint configured — ${unsyncedCount} record(s) retained locally. Use Export JSON.`,
+      );
+      return;
+    }
+    if (unsyncedCount === 0) {
+      setNotice('Outbox is empty — nothing to sync.');
+      return;
+    }
+    setSyncing(true);
+    setNotice(`Syncing ${unsyncedCount} record(s)…`);
+    let syncedCount = 0;
+    let failedCount = 0;
+    for (const c of cases.filter((c) => c.syncStatus !== 'synced')) {
+      const outcome = await syncCase(c, config);
+      setCases((prev) =>
+        prev.map((p) =>
+          p.id === c.id
+            ? {
+                ...p,
+                syncStatus: outcome.status,
+                syncAttempts: outcome.attempts,
+                lastSyncError: outcome.error,
+                acknowledgedAt: outcome.acknowledgedAt,
+              }
+            : p,
+        ),
+      );
+      if (outcome.status === 'synced') syncedCount++;
+      else failedCount++;
+    }
+    setSyncing(false);
+    setNotice(
+      `Sync finished: ${syncedCount} acknowledged by the server, ${failedCount} failed and retained in the outbox.`,
+    );
+  }, [cases, config, unsyncedCount]);
+
+  const exportJSON = useCallback(() => {
+    const payload = {
+      app: 'MetroResolve',
+      exportedAt: new Date().toISOString(),
+      source: 'synthetic-demo-data',
+      outboxCount: unsyncedCount,
+      cases,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `metroresolve-export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setNotice(`Exported ${cases.length} case(s) to JSON.`);
+  }, [cases, unsyncedCount]);
+
+  const checkModel = useCallback(async () => {
+    setOllama((o) => ({ ...o, checking: true }));
+    const status = await checkOllama(ollama.model);
+    setOllama((o) => ({ ...o, status, checking: false }));
+    setNotice(
+      status.daemon
+        ? status.modelInstalled
+          ? `Local model "${ollama.model}" is installed and usable.`
+          : `Ollama is running, but "${ollama.model}" is NOT installed. Installed: ${status.installedModels.join(', ') || 'none'}. Rule-based triage remains active.`
+        : `No local Ollama daemon (${status.error ?? 'unreachable'}). Rule-based triage remains active.`,
+    );
+  }, [ollama.model]);
 
   return (
     <div className="shell">
       <header className="header">
         <div>
-          <h1>RouteRelay</h1>
-          <p className="tagline">Offline-first metro journey recovery</p>
+          <h1>MetroResolve</h1>
+          <p className="tagline">
+            PS-07 · Every Complaint Heard — metro complaint triage
+          </p>
         </div>
-        <span className="badge demo">DEMO MODE</span>
+        <div className="header-right">
+          <span className={`pill ${online ? 'ok' : 'warn'}`}>
+            {online ? 'Online' : 'Offline'}
+          </span>
+          <span className="pill warn">
+            Outbox: {unsyncedCount} unsynced
+          </span>
+          <span className="pill">
+            Storage: {storage.available ? 'local (persistent)' : 'session-only'}
+          </span>
+          <button className="btn" onClick={exportJSON}>
+            Export JSON
+          </button>
+          <button
+            className="btn primary"
+            onClick={syncAll}
+            disabled={syncing}
+          >
+            {syncing ? 'Syncing…' : 'Sync now'}
+          </button>
+        </div>
       </header>
 
-      <div className="statusbar" role="status">
-        <span className="pill">Data: local · synthetic</span>
-        <span className="pill warn">Live data: not connected</span>
-        <span className="pill">
-          Storage: {storage.available ? 'local (persistent)' : 'session-only'}
-        </span>
-      </div>
+      {notice && (
+        <div className="notice" role="status">
+          {notice}
+        </div>
+      )}
 
-      <main className="grid">
-        <section className="panel" aria-label="Scenario selection">
-          <h2>1 · Affected segment (incident)</h2>
-          <label htmlFor="scenario">Incident (simulated)</label>
-          <select
-            id="scenario"
-            value={scenarioId}
-            onChange={(e) => setScenarioId(e.target.value)}
-          >
-            <option value="">— Select an incident —</option>
-            {scenarios.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-          {scenario && <p className="hint">{scenario.description}</p>}
+      <section className="stats" aria-label="Dashboard statistics">
+        <div className="stat">
+          <span className="stat-value">{stats.total}</span>
+          <span className="stat-label">Total complaints</span>
+        </div>
+        <div className="stat">
+          <span className="stat-value">{stats.pending}</span>
+          <span className="stat-label">Pending cases</span>
+        </div>
+        <div className="stat urgent">
+          <span className="stat-value">{stats.urgent}</span>
+          <span className="stat-label">Urgent cases</span>
+        </div>
+        <div className="stat">
+          <span className="stat-value">{stats.synced}</span>
+          <span className="stat-label">Server-acknowledged</span>
+        </div>
+      </section>
 
-          <h2>2 · Destination</h2>
-          <label htmlFor="destination">Destination station</label>
-          <select
-            id="destination"
-            value={destinationId}
-            onChange={(e) => setDestinationId(e.target.value)}
-          >
-            <option value="">— Select a destination —</option>
-            {stations.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
+      <div className="layout">
+        <div className="sidebar">
+          <section className="panel">
+            <h2>Add complaint</h2>
+            <label htmlFor="src">Complaint text</label>
+            <textarea
+              id="src"
+              rows={4}
+              placeholder="Paste or type the complaint in any supported language…"
+              value={form.sourceText}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, sourceText: e.target.value }))
+              }
+            />
+            <label htmlFor="chan">Channel</label>
+            <select
+              id="chan"
+              value={form.channel}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, channel: e.target.value }))
+              }
+            >
+              {CHANNELS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <label htmlFor="stat">Station</label>
+            <select
+              id="stat"
+              value={form.station}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, station: e.target.value }))
+              }
+            >
+              {STATIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <button
+              className="btn primary wide"
+              onClick={addManualCase}
+              disabled={!form.sourceText.trim()}
+            >
+              Classify &amp; add case
+            </button>
+          </section>
+
+          <section className="panel">
+            <h2>Sample batch (synthetic)</h2>
+            <p className="hint">
+              Clearly-labelled synthetic complaints. Click to add one to the
+              working queue.
+            </p>
+            <ul className="samples">
+              {SAMPLES.map((s) => (
+                <li key={s.id}>
+                  <button
+                    className="sample-btn"
+                    onClick={() => addSample(s)}
+                    title={s.sourceText}
+                  >
+                    <span className="sample-id">{s.id}</span>
+                    <span className="sample-text">{s.sourceText}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="panel">
+            <h2>Sync configuration</h2>
+            <label htmlFor="endpoint">Endpoint URL (optional)</label>
+            <input
+              id="endpoint"
+              type="url"
+              placeholder="https://example.invalid/api/complaints"
+              value={config.endpoint ?? ''}
+              onChange={(e) =>
+                setConfig((c) => ({
+                  ...c,
+                  endpoint: e.target.value.trim() || null,
+                }))
+              }
+            />
+            <div className="row">
+              <label htmlFor="timeout">Timeout (ms)</label>
+              <input
+                id="timeout"
+                type="number"
+                min={1000}
+                step={1000}
+                value={config.timeoutMs}
+                onChange={(e) =>
+                  setConfig((c) => ({
+                    ...c,
+                    timeoutMs: Math.max(1000, Number(e.target.value) || 8000),
+                  }))
+                }
+              />
+              <label htmlFor="attempts">Max attempts</label>
+              <input
+                id="attempts"
+                type="number"
+                min={1}
+                max={10}
+                value={config.maxAttempts}
+                onChange={(e) =>
+                  setConfig((c) => ({
+                    ...c,
+                    maxAttempts: Math.min(
+                      10,
+                      Math.max(1, Number(e.target.value) || 3),
+                    ),
+                  }))
+                }
+              />
+            </div>
+            <p className="hint">
+              Retries send an <code>Idempotency-Key</code> header (the case
+              id) so they never duplicate records. A case is marked synced
+              only after the server acknowledges it.
+            </p>
+          </section>
+
+          <section className="panel">
+            <h2>Local AI (optional)</h2>
+            <p className="hint">
+              Optional Ollama adapter. Off by default — the deterministic
+              rule-based engine always runs and is the fallback. Nothing
+              leaves localhost:11434.
+            </p>
+            <label htmlFor="model">Model name</label>
+            <input
+              id="model"
+              value={ollama.model}
+              onChange={(e) =>
+                setOllama((o) => ({ ...o, model: e.target.value }))
+              }
+            />
+            <div className="row">
+              <button
+                className="btn"
+                onClick={checkModel}
+                disabled={ollama.checking}
+              >
+                {ollama.checking ? 'Checking…' : 'Check local model'}
+              </button>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={ollama.enabled}
+                  onChange={(e) =>
+                    setOllama((o) => ({ ...o, enabled: e.target.checked }))
+                  }
+                />
+                Enable for triage
+              </label>
+            </div>
+            {ollama.status && (
+              <p className="hint">
+                Daemon: {ollama.status.daemon ? 'running' : 'unreachable'} ·
+                Model installed:{' '}
+                {ollama.status.modelInstalled ? 'yes' : 'no'}
+              </p>
+            )}
+          </section>
+        </div>
+
+        <section className="panel queue-panel" aria-label="Complaint queue">
+          <h2>Department queues</h2>
+          <div className="tabs" role="tablist">
+            {(['All', ...DEPARTMENTS] as const).map((d) => {
+              const count =
+                d === 'All'
+                  ? cases.length
+                  : cases.filter((c) => c.department === d).length;
+              return (
+                <button
+                  key={d}
+                  role="tab"
+                  aria-selected={filter === d}
+                  className={`tab ${filter === d ? 'active' : ''}`}
+                  onClick={() => setFilter(d)}
+                >
+                  {d} <span className="tab-count">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+          <ul className="queue">
+            {visibleCases.length === 0 && (
+              <li className="empty">
+                No complaints in this queue yet. Add one manually or from the
+                sample batch.
+              </li>
+            )}
+            {visibleCases.map((c) => (
+              <li key={c.id}>
+                <button
+                  className={`queue-item ${selectedId === c.id ? 'selected' : ''}`}
+                  onClick={() => setSelectedId(c.id)}
+                >
+                  <span className={`band ${BAND_CLASS[c.urgencyBand]}`}>
+                    {c.urgencyScore}
+                  </span>
+                  <span className="queue-body">
+                    <span className="queue-top">
+                      <strong>{c.id}</strong>
+                      <span className="dept-tag">{c.department}</span>
+                      <span className="lang-tag">{c.language}</span>
+                      <span
+                        className={`sync-dot ${c.syncStatus}`}
+                        title={`Sync status: ${c.syncStatus}`}
+                      />
+                    </span>
+                    <span className="queue-text">{c.sourceText}</span>
+                  </span>
+                </button>
+              </li>
             ))}
-          </select>
+          </ul>
         </section>
 
-        <section className="panel results" aria-label="Route recovery results">
-          <h2>Route recovery</h2>
-          {!scenario && !destination ? (
+        <section className="panel detail-panel" aria-label="Complaint detail">
+          {selected ? (
+            <DetailPanel
+              key={selected.id}
+              record={selected}
+              onUpdate={updateCase}
+            />
+          ) : (
             <div className="empty">
               <p>
-                <strong>No scenario selected yet.</strong>
+                <strong>No case selected.</strong>
               </p>
               <p>
-                Choose a simulated incident and a destination to see
-                alternative-route options here.
-              </p>
-            </div>
-          ) : (
-            <div className="placeholder">
-              <p>
-                Scenario: <strong>{scenario?.name ?? '—'}</strong>
-              </p>
-              <p>
-                Destination: <strong>{destination?.name ?? '—'}</strong>
-              </p>
-              <p className="hint">
-                Placeholder — the route-calculation engine is not implemented
-                yet (see docs/tasks.md, P1). Any route shown later in this
-                area is unverified demo data, not a real-world transport
-                alternative.
+                Pick a complaint from the queue — the most urgent ones are
+                listed first — or add a new complaint.
               </p>
             </div>
           )}
         </section>
-      </main>
+      </div>
 
       <footer className="footer">
         <p>
-          All network data on this screen is <strong>synthetic demo data</strong>{' '}
-          (source: {meta.source}, generated {meta.generated}). Not live, not
-          verified. {meta.notes}
+          All complaint data is <strong>synthetic demo data</strong> (source:{' '}
+          {sampleData.meta.source}). Language detection, classification and
+          urgency scores are <strong>prototype decision support</strong> — not
+          verified translations, not official operational severity ratings.
+          Drafts are editable and are never sent or approved by this app.
         </p>
       </footer>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function DetailPanel({
+  record,
+  onUpdate,
+}: {
+  record: CaseRecord;
+  onUpdate: (id: string, patch: Partial<CaseRecord>) => void;
+}) {
+  const [draft, setDraft] = useState(record.responseDraft);
+  const [saved, setSaved] = useState(false);
+
+  const saveDraft = () => {
+    onUpdate(record.id, { responseDraft: draft });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const statusOptions: CaseStatus[] = ['pending', 'in-progress', 'resolved'];
+
+  return (
+    <div className="detail">
+      <div className="detail-head">
+        <h2>
+          {record.id}{' '}
+          <span className="origin-tag">{record.origin === 'sample-batch' ? 'sample batch' : 'manual'}</span>
+        </h2>
+        <label className="inline">
+          Status
+          <select
+            value={record.status}
+            onChange={(e) =>
+              onUpdate(record.id, { status: e.target.value as CaseStatus })
+            }
+          >
+            {statusOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="urgency-box">
+        <span className={`urgency-score band ${BAND_CLASS[record.urgencyBand]}`}>
+          {record.urgencyScore}
+        </span>
+        <div>
+          <strong className={`band-label ${BAND_CLASS[record.urgencyBand]}`}>
+            {record.urgencyBand.toUpperCase()}
+          </strong>
+          <span className="hint"> urgency score (0–100, rule-based)</span>
+        </div>
+      </div>
+
+      <h3>Why this score</h3>
+      {record.urgencyReasons.length === 0 ? (
+        <p className="hint">No urgency rules fired for this complaint.</p>
+      ) : (
+        <ul className="reasons">
+          {record.urgencyReasons.map((r, i) => (
+            <li key={i}>
+              {r.points > 0 && <span className="points">+{r.points}</span>}
+              {r.description}
+              <code>{r.ruleId}</code>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h3>Complaint</h3>
+      <blockquote className="source-text">{record.sourceText}</blockquote>
+      <dl className="meta">
+        <div>
+          <dt>Channel</dt>
+          <dd>{record.channel}</dd>
+        </div>
+        <div>
+          <dt>Station</dt>
+          <dd>{record.station}</dd>
+        </div>
+        <div>
+          <dt>Language</dt>
+          <dd>
+            {LANGUAGE_LABELS[record.language]} ({record.languageConfidence}{' '}
+            confidence)
+          </dd>
+        </div>
+      </dl>
+      <p className="hint">{record.languageNote}</p>
+
+      <h3>Department</h3>
+      <p>
+        <strong>{record.department}</strong>
+      </p>
+      {record.matchedSignals.length > 0 && (
+        <ul className="reasons">
+          {record.matchedSignals.slice(0, 8).map((s, i) => (
+            <li key={i}>
+              matched <code>"{s.term}"</code> → {s.department} (weight {s.weight})
+            </li>
+          ))}
+        </ul>
+      )}
+      {record.aiNote && <p className="hint ai">{record.aiNote}</p>}
+
+      <h3>Response draft</h3>
+      <div className="draft-meta">
+        <span className="pill">
+          Draft language: {record.responseLanguage}
+        </span>
+        <span className="pill warn">DRAFT — not sent, not approved</span>
+      </div>
+      <p className="hint">{record.responseNote}</p>
+      <textarea
+        id="response"
+        rows={6}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      <button className="btn primary" onClick={saveDraft}>
+        {saved ? 'Saved locally (marked unsynced)' : 'Save response locally'}
+      </button>
+      {record.syncStatus !== 'pending' && (
+        <p className="hint">
+          Sync: {record.syncStatus}
+          {record.syncAttempts > 0 && ` after ${record.syncAttempts} attempt(s)`}
+          {record.acknowledgedAt && ` — server acknowledged at ${record.acknowledgedAt}`}
+          {record.lastSyncError && ` — ${record.lastSyncError}`}
+        </p>
+      )}
     </div>
   );
 }

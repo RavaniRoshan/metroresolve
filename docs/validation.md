@@ -1,87 +1,99 @@
-# RouteRelay — Validation procedures
+# Validation — MetroResolve
 
-**Automated** checks can be run by command; **manual** checks
-need a human in a browser. Both are required before claiming a
-task done. Run automated checks after every change; run manual
-checks at least once before the demo.
+Automated checks were run against the **production build**
+(`npm run build && npm run preview`) with a headless
+Chromium driven over CDP. Manual checks are for the demo
+machine. Automated ≠ manual: everything below marked
+**[A]** ran as code; everything **[M]** must be run by a
+human once.
 
-## Automated
+## Environment verified
 
-```bash
-# 1. Typecheck + production build
-npm run build
-# Expect: tsc passes, vite emits dist/
+- Node v24.21.0, npm 11.19.0, git 2.43.0.
+- Ollama daemon at localhost:11434 with models
+  `claude-sonnet-4-5:latest`, `qwen2.5-coder:3b`;
+  `gemma4:e2b` NOT installed (checked live, harness P11).
 
-# 2. Production preview serves the shell, SW, and hashed assets
-npm run preview &
-curl -sS -o /dev/null -w "%{http_code}\n" http://localhost:4173/          # 200
-curl -sS -o /dev/null -w "%{http_code}\n" http://localhost:4173/sw.js    # 200
-ASSET=$(ls dist/assets | grep '\.js$' | head -1)
-curl -sS -o /dev/null -w "%{http_code}\n" "http://localhost:4173/assets/$ASSET"  # 200
-kill %1
+## Automated suite (33 checks — all passing)
 
-# 3. No external URLs in the built output (critical-path hygiene)
-grep -rEo 'https?://[^"'"'"' )]+' dist | grep -v 'www.w3.org' | sort -u
-# Expect: no output. (www.w3.org matches are XML namespaces inside
-# React's bundle, not network fetches.)
+Run: `node /tmp/mr-test.mjs` (development harness; not
+shipped in the repo). Phases:
 
-# 4. Dev server smoke test
-npm run dev &
-curl -sS http://localhost:5173/ | grep -o 'src/main.tsx'
-kill %1
-```
+- **[A] P1 first load:** exactly 12 cases seeded; stats
+  12/12/4/0; outbox pill "12 unsynced"; online indicator.
+- **[A] P2 classification:** all 12 samples match the
+  documented language/department/score/band table; all
+  four language groups present; SAMPLE-03 has ≥2 urgency
+  reasons; SAMPLE-03 draft is Gujarati.
+- **[A] P3 detail panel:** source text, department +
+  URGENT band, language with confidence, urgency reasons,
+  matched signals, "DRAFT — not sent, not approved".
+- **[A] P4 manual creation:** Gujarati text → MR-0001,
+  gu/Lifts, urgency 60, origin manual.
+- **[A] P5 response editing:** edit saved; case marked
+  `pending` (outbox).
+- **[A] P6 reload persistence:** 13 cases and the edited
+  draft survive a full reload.
+- **[A] P7 offline:** with `Network.emulateNetworkConditions
+  {offline:true}`, a fresh navigation renders h1
+  "MetroResolve", 13 queue items, 13 cases, and the
+  "Offline" indicator — served from the SW cache
+  (`metroresolve-shell-v1`).
+- **[A] P8 sync 404:** endpoint returning 404 → all cases
+  `failed` after exactly 1 attempt, none claimed synced.
+- **[A] P9 sync refused:** dead port → 2 attempts with
+  backoff, then `failed`; records retained in outbox.
+- **[A] P10 sync 2xx:** local CORS-enabled endpoint → all
+  cases `synced` with `acknowledgedAt`; `Idempotency-Key`
+  present on all 13 requests.
+- **[A] P11 Ollama check:** daemon detected, `gemma4:e2b`
+  correctly reported NOT installed, rule-based triage
+  active.
+- **[A] P12 export:** JSON export of all 13 cases.
+- **[A] P0:** zero console errors / exceptions throughout.
 
-## Manual
+## Manual procedures (run once on the demo machine)
 
-| # | Procedure | Pass condition |
-|---|-----------|----------------|
-| M1 | `npm run dev`, open http://localhost:5173 | Shell renders; DEMO MODE badge, status pills, both selectors, empty state visible; no console errors |
-| M2 | Core flow: select incident sc01 + destination "North Terminal" | Results placeholder shows both; no errors |
-| M3 | Refresh the page | Selection persists (localStorage) |
-| M4 | Browser dev tools → Application → Storage → clear, then re-select | Storage pill still says "local (persistent)"; flow works |
-| M5 | `npm run build && npm run preview`, open http://localhost:4173 | Production build renders identically |
-| M6 | **First-load caching:** on M5 URL, reload once while online | DevTools → Application → Service Workers shows `/sw.js` active; Cache Storage contains routerelay-shell-v1 |
-| M7 | **Airplane-mode reload:** enable airplane mode (or DevTools → Network → Offline), hard-reload M5 page | App shell + data render from cache; selectors work; no failed network requests |
-| M8 | Back online; DevTools → Network: confirm no request is made to load demo data (it is bundled) | Data arrives inside the JS bundle, not via fetch |
-| M9 | Missing/stale data simulation: edit `src/data/network.json` to invalid JSON, run `npm run build` | Build fails loudly — malformed bundled data cannot ship silently |
-| M10 | Narrow viewport (~360px) | Layout stacks to one column; selectors usable |
+- **[M1] Dev startup:** `npm install && npm run dev` →
+  http://localhost:5173 renders the dashboard; 12 cases
+  seeded on first visit.
+- **[M2] Production build:** `npm run build` → exits 0,
+  no TypeScript errors; `dist/` emitted.
+- **[M3] Production preview:** `npm run preview` →
+  http://localhost:4173 renders; identical data to dev.
+- **[M4] Core user flow:** open SAMPLE-03 → verify
+  Lifts/70/URGENT/reasons/Gujarati draft; add a manual
+  complaint; edit its draft; save locally; confirm the
+  outbox count increments.
+- **[M5] Invalid data:** submit empty complaint text →
+  button disabled or friendly notice; paste 2000+ chars →
+  case still created; no crash.
+- **[M6] Refresh persistence:** hard-reload → all cases
+  and edits intact.
+- **[M7] First-load caching:** clear site data, load once
+  online (SW installs), then check
+  DevTools → Application → Service Workers shows the SW
+  active, and Application → Cache Storage shows
+  `metroresolve-shell-v1`.
+- **[M8] Airplane-mode reload after caching:** tick
+  "Offline" in DevTools (or physical airplane mode) →
+  hard-reload → full dashboard renders; triage, editing,
+  local save, and export all work; header shows "Offline".
+- **[M9] Missing/stale data:** rename `dist/` away and
+  serve an empty dir → clear error, no infinite spinner
+  (server-level concern; app shell itself never 404s its
+  own assets because they are bundled).
+- **[M10] Language coverage:** one complaint each in
+  English, Hindi, Gujarati, Gujlish, Hinglish → verify
+  detected language badge and template language.
 
-## Notes
+## What was NOT validated
 
-- Do **not** claim offline success because the dev server runs
-  locally. Only M6+M7 (real browser, real airplane mode) count.
-- The service worker's first load must be online; it then
-  caches the shell. That is by design and must be stated in the
-  demo, not hidden.
-- If a manual check fails, record the failure in
-  `docs/tasks.md` (uncheck the related task) rather than
-  claiming it.
-
-## CDP automation (optional, zero-dependency)
-
-M1–M3, M6 and M7 were automated during preparation using
-headless Chromium + the Chrome DevTools Protocol over Node's
-built-in WebSocket (no Puppeteer/Playwright needed):
-
-```bash
-# terminal 1: production server
-npm run build && npm run preview
-
-# terminal 2: headless Chromium with remote debugging
-chromium --headless=new --no-sandbox --disable-gpu \
-  --remote-debugging-port=9222 --user-data-dir=/tmp/routerelay-cdp \
-  about:blank
-
-# terminal 3: a small Node script that connects to
-# http://127.0.0.1:9222/json/list, then via WebSocket:
-#   Page.navigate to http://localhost:4173/
-#   Runtime.evaluate to read DOM state and fire select 'change' events
-#   Network.emulateNetworkConditions {offline:true} + Page.navigate
-#     to simulate airplane mode and confirm a cached render
-```
-
-Checks executed this way on 2026-10-10: shell content, selector
-population, interaction-driven results placeholder, localStorage
-persistence across hard reload, SW control + cache creation, and a
-full render while the network stack was forced offline — all with
-zero console errors.
+- Real-browser airplane mode (no physical toggle here —
+  CDP-level network emulation was used instead; M8 covers
+  the human check).
+- A real sync endpoint (none exists; a local stub server
+  stood in for the 2xx path).
+- Ollama inference (model not installed; adapter code is
+  exercised only up to the model check).
+- Cross-browser behavior (Chromium only).

@@ -6,7 +6,7 @@
  * Deliberately simple: no precache manifest, no background sync, no
  * live-data caching. */
 
-const CACHE_NAME = 'routerelay-shell-v1';
+const CACHE_NAME = 'metroresolve-shell-v1';
 const PRECACHE_URLS = ['/', '/index.html'];
 
 self.addEventListener('install', (event) => {

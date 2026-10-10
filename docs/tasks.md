@@ -1,83 +1,102 @@
-# RouteRelay — Task list
+# Tasks — MetroResolve
 
-Status discipline: a checkbox is marked **only after the work is
-implemented and verified**. Definition of done (DoD) is stated per task.
+Status legend: `[x]` = implemented **and** verified
+(automated check + observed result). Nothing is checked
+off on faith.
 
-## P0 — required for the smallest working prototype
+## P0 — smallest working prototype (complete)
 
-- [x] **Project scaffold** — Vite + React + TypeScript, minimal deps
-      (react, react-dom, vite, @vitejs/plugin-react, typescript, types).
-      Acceptance: `npm install` clean; `npm run build` passes.
-      DoD: lockfile committed; build green.
-      Verified 2026-10-10: install clean (0 vulnerabilities), build green.
-- [x] **Application shell** — responsive layout, RouteRelay home screen,
-      DEMO MODE badge, data-status pills (local/synthetic + live/not
-      connected), storage-status pill.
-      Acceptance: renders in a browser with no runtime errors.
-      DoD: verified on desktop + narrow viewport.
-      Verified 2026-10-10: headless Chromium render, 0 console errors;
-      layout checked at 1280px (2-col) and 360px (1-col, no overflow).
-- [x] **Selection UI** — incident selector + destination selector from
-      bundled data, results placeholder, friendly empty state.
-      Acceptance: selecting values updates the results area; empty state
-      shows when nothing is selected.
-      DoD: core-flow test in validation.md passes.
-      Verified 2026-10-10: CDP-driven DOM events updated the results
-      placeholder; empty state rendered on first load.
-- [x] **Synthetic demo data** — `src/data/network.json` with stations,
-      edges, modes, statuses, sourced durations, scenarios; labelled
-      synthetic via `meta` block.
-      Acceptance: loads with no network request (bundled import).
-      DoD: verified in built bundle; no fetch calls in network tab.
-      Verified 2026-10-10: station/edge strings present in the built
-      JS bundle; selectors populated (2 scenarios, 8 stations).
-- [x] **Local persistence** — scenario + destination survive refresh;
-      graceful degradation when storage is unavailable.
-      Acceptance: refresh keeps selection; storage pill reflects reality.
-      DoD: refresh test passes.
-      Verified 2026-10-10: CDP test confirmed localStorage values and
-      restoration after a hard reload; degradation path covered by the
-      storage wrapper's in-memory fallback (code-verified).
-- [x] **Offline readiness** — no external fonts/icons/scripts/tiles;
-      service worker caches shell + assets; app renders from cache.
-      Acceptance: `dist/` contains no external URLs; manual
-      airplane-mode reload test passes (see validation.md).
-      DoD: both automated and manual checks green.
-      Verified 2026-10-10: dist/ URL scan clean; SW controlled the page
-      with cache routerelay-shell-v1; hard reload under
-      Network.emulateNetworkConditions(offline:true) rendered the full
-      app from cache.
-- [x] **Specification docs** — requirements, design, tasks, validation,
-      decisions, idea-patterns, README, AGENTS.md.
-      Acceptance: all files exist and are consistent.
-      DoD: reviewed once against the mission brief.
-      Verified 2026-10-10: all eight files written and cross-checked.
-- [x] **Git baseline** — `.gitignore` correct, no secrets staged,
-      meaningful baseline commit on `main`.
-      Acceptance: `git status` clean; `git log` shows the commit.
-      DoD: commit exists locally; push documented (not executed).
-      Verified 2026-10-10: secret scan clean; commit 2c02008 on
-      `main`; `git status` clean; no remote configured yet —
-      push commands documented in README.md.
+- [x] **P0.1 Project skeleton**: React + Vite + TS,
+      minimal CSS, no runtime deps beyond React.
+      *Done: `npm run build` passes; bundle 255.54 kB JS
+      / 7.40 kB CSS.*
+- [x] **P0.2 Dashboard**: total, pending, urgent,
+      server-acknowledged stat cards.
+      *Done: renders 12/12/4/0 after seed (harness P1).*
+- [x] **P0.3 Synthetic sample batch**: 12 complaints,
+      EN/HI/GU/Gujlish/Hinglish, clearly labelled
+      synthetic. *Done: `src/data/complaints.json`;
+      seeded on first launch only.*
+- [x] **P0.4 Manual entry + sample selection**: add-form
+      with station/channel pickers; sample batch list.
+      *Done: harness P4 creates MR-0001.*
+- [x] **P0.5 Department classification** (5 departments)
+      with visible matched signals. *Done: 12/12 samples
+      match documented expectations (harness P2).*
+- [x] **P0.6 Urgency score + per-rule reasons**.
+      *Done: SAMPLE-03 shows 70/URGENT with reasons
+      "trapped-signal", "urgent-language".*
+- [x] **P0.7 Editable draft in detected language**.
+      *Done: Gujarati template for SAMPLE-03; edit +
+      "Save response locally" works (harness P5).*
+- [x] **P0.8 Department queues + urgency-first ordering**.
+      *Done: tabs filter; queue sorted by score desc.*
+- [x] **P0.9 Persistence across reload**. *Done: harness
+      P6 — 13 cases and edited draft survive reload.*
+- [x] **P0.10 Offline shell via service worker**. *Done:
+      harness P7 — offline navigation renders h1, 13
+      queue items, "Offline" indicator; SW cache
+      `metroresolve-shell-v1` present.*
+- [x] **P0.11 Online/offline indicator + outbox count**.
+      *Done: header pill; "Outbox: 12 unsynced" after
+      seed.*
+- [x] **P0.12 JSON export**. *Done: harness P12 —
+      "Exported 13 case(s) to JSON".*
+- [x] **P0.13 Sync adapter**: configurable endpoint,
+      idempotency keys, backoff retries, no-duplicate
+      semantics, "synced" only on 2xx. *Done: harness
+      P8 (404 → fail after 1 attempt), P9 (refused →
+      2 attempts then fail, records retained), P10
+      (2xx → all synced, Idempotency-Key on all 13
+      requests).*
+- [x] **P0.14 Zero console errors** across the full
+      flow. *Done: harness P0.*
 
-## P1 — improvements only after P0 passes
+**Definition of done for P0:** all of the above pass in
+the production build (`npm run build && npm run preview`),
+verified by the automated harness (33/33) and the manual
+procedures in `docs/validation.md`.
 
-- [ ] **Route engine** — graph build, scenario-aware edge removal,
-      Dijkstra with hop-cost fallback for unknown durations.
-      Acceptance: for sc01, a path avoiding e02 is produced; for a
-      destination made unreachable, the app says so plainly.
-- [ ] **Route rendering** — ordered station list, per-edge mode and
-      duration, synthetic/unknown durations marked.
-- [ ] **Data hygiene** — JSON schema validation at load; clear error
-      state if bundled data is malformed.
-- [ ] **Challenge adaptation** — re-scope requirements/tasks to the
-      announced challenge; possibly regenerate demo data.
+## P1 — improvements after P0 holds
+
+- [ ] **P1.1 Manual test on the demo machine**: run the
+      M1–M8 procedures in `docs/validation.md` in a real
+      browser, including airplane mode. *Acceptance: every
+      M-check passes; note any machine-specific behavior.*
+- [ ] **P1.2 Optional Ollama adapter live test** — only if
+      `gemma4:e2b` is installed locally (it is not in this
+      environment; do not pull it). *Acceptance: one
+      Gujarati, Hindi, English, and Gujlish example each
+      triaged via Ollama; rule-based fallback still works
+      when Ollama is stopped.*
+- [ ] **P1.3 Real sync endpoint smoke test** (if the
+      organizers provide one). *Acceptance: cases sync
+      once; a duplicate POST with the same Idempotency-Key
+      does not create a second record server-side.*
+- [ ] **P1.4 Accessibility pass**: focus order, labels,
+      contrast on the three-column layout.
+- [ ] **P1.5 More sample variety**: one complaint per
+      station; edge cases (empty text, very long text,
+      mixed-script single sentence).
 
 ## P2 — explicitly deferred
 
-- [ ] Multi-leg / multimodal journeys (walking, bus interchange).
-- [ ] User-reported incidents (would need a backend — out of scope).
-- [ ] i18n, theming, accessibility audit beyond basics.
-- [ ] Automated browser tests (Playwright) — heavy for a 2-hour event.
-- [ ] Real GTFS import pipeline and data-provenance tooling.
-- [ ] Background sync, push notifications, install prompt UX.
+- [ ] **P2.1** Real complaint ingestion (email/WhatsApp/
+      social channels) — needs backend; out of scope.
+- [ ] **P2.2** Trained multilingual model for detection/
+      classification — needs data and time; heuristic
+      remains the shipped engine.
+- [ ] **P2.3** Multi-user roles, authentication, audit
+      log, dashboards/analytics.
+- [ ] **P2.4** Reply sending through official channels
+      (would require real credentials; never faked).
+- [ ] **P2.5** IndexedDB migration for large queues —
+      localStorage is sufficient for demo scale.
+- [ ] **P2.6** i18n of the UI itself (UI is English;
+      replies are templated in Gujarati/Hindi/English).
+
+## Post-event / adaptation
+
+If the actual challenge differs from PS-07, re-scope
+from `docs/requirements.md` downward before touching
+code — see the Hackathon Start Procedure in `README.md`.

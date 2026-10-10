@@ -1,0 +1,95 @@
+{
+  "meta": {
+    "title": "MetroResolve synthetic complaint batch",
+    "source": "synthetic-demo-data",
+    "verified": false,
+    "simulation": true,
+    "generated": "2026-10-10",
+    "notes": "All complaints are synthetic. Station names are generic placeholders. This is NOT real passenger data and NOT real service status. Language detection and classification are heuristic prototypes."
+  },
+  "stations": [
+    "Central Station",
+    "Museum",
+    "University",
+    "Tech Park",
+    "Old Market",
+    "Stadium",
+    "Riverside",
+    "North Terminal"
+  ],
+  "channels": ["app", "email", "phone", "in-person", "social"],
+  "complaints": [
+    {
+      "id": "SAMPLE-01",
+      "sourceText": "There was smoke coming from the escalator at Central Station. Feels like an electrical fire. Urgent!",
+      "channel": "in-person",
+      "station": "Central Station"
+    },
+    {
+      "id": "SAMPLE-02",
+      "sourceText": "प्लेटफॉर्म पर कचरा बिखरा है और टॉयलेट बहुत गंदा है। सफाई कराई जाए।",
+      "channel": "app",
+      "station": "Old Market"
+    },
+    {
+      "id": "SAMPLE-03",
+      "sourceText": "લિફ્ટ માં એક વ્યક્તિ ફંસી ગઈ છે, કૃપા કરીને મદદ કરો!",
+      "channel": "phone",
+      "station": "University"
+    },
+    {
+      "id": "SAMPLE-04",
+      "sourceText": "M-card recharge ni website pe payment 200 રૂપિયા aayi but balance વધી નહીં. Please refund.",
+      "channel": "app",
+      "station": "Tech Park"
+    },
+    {
+      "id": "SAMPLE-05",
+      "sourceText": "The ticket counter attendant was rude and ignored senior citizens waiting in line.",
+      "channel": "in-person",
+      "station": "Central Station"
+    },
+    {
+      "id": "SAMPLE-06",
+      "sourceText": "સ્ટેશન પર પાણી ટપકી રહી છે અને ફરશ ગંદી છે, સ્લિપ થઈ શકે છે.",
+      "channel": "social",
+      "station": "Stadium"
+    },
+    {
+      "id": "SAMPLE-07",
+      "sourceText": "Platform 2 pe smoke देखाई दे रहा है, jaldi se check karo please.",
+      "channel": "social",
+      "station": "North Terminal"
+    },
+    {
+      "id": "SAMPLE-08",
+      "sourceText": "I was charged double at the token machine and no refund was given.",
+      "channel": "email",
+      "station": "Museum"
+    },
+    {
+      "id": "SAMPLE-09",
+      "sourceText": "સુરક્ષા કર્મચારીએ મારી ફરિયાદ સાંભળી નહીં અને અસભ્ય વર્તન કર્યું.",
+      "channel": "phone",
+      "station": "Riverside"
+    },
+    {
+      "id": "SAMPLE-10",
+      "sourceText": "लिफ्ट 3 घंटे से काम नहीं कर रही है, व्हीलचेयर यात्री परेशान हैं।",
+      "channel": "app",
+      "station": "North Terminal"
+    },
+    {
+      "id": "SAMPLE-11",
+      "sourceText": "Spilled drink on the stairs, no warning sign placed.",
+      "channel": "in-person",
+      "station": "Museum"
+    },
+    {
+      "id": "SAMPLE-12",
+      "sourceText": "Emergency exit બંધ rahi che રાત્રે, tamne check karjo safety માટે.",
+      "channel": "email",
+      "station": "Tech Park"
+    }
+  ]
+}

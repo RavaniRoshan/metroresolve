@@ -1,99 +1,114 @@
-# RouteRelay — Requirements (PROVISIONAL)
+# Requirements — MetroResolve (PS-07: Every Complaint Heard)
 
-> Status: prepared **before** the official hackathon challenge was announced.
-> Everything below is a hypothesis about the challenge, not a commitment.
-> All network data in this project is **synthetic demo data** unless explicitly labelled otherwise.
+**Status: challenge announced.** The organizers' problem is
+PS-07 (Metro Operations). This document is scoped to it.
 
-## Provisional problem statement
+## Problem statement (provisional, from the announcement)
 
-When a metro segment is disrupted, a passenger on a train platform or
-station concourse needs a quick alternative route to their destination —
-using only data bundled with the app, because event connectivity cannot
-be relied on.
+Passenger complaints arrive through multiple channels and
+in Gujarati, Hindi, English, and mixed Gujlish. Urgent
+complaints get buried. The required solution sorts
+complaints into department queues, assigns urgency scores,
+drafts replies in the complainant's language, works fully
+on-device without network access, and syncs when
+connectivity returns.
 
-## Target user & job to be done
+## Target user and job to be done
 
-- **User (provisional):** a metro passenger affected by a disruption;
-  possibly an operations volunteer demonstrating recovery workflows.
-- **Job to be done:** "My line is disrupted — show me, offline, a
-  plausible alternative across the network, and be honest that it is
-  simulated."
+- **User:** a station controller / metro operations staff
+  member under time pressure, possibly on a device with
+  intermittent connectivity.
+- **Job:** within seconds of a complaint arriving, know
+  which department must handle it, how urgent it is (and
+  why), and have a language-appropriate reply draft ready
+  to review, edit, and send through the official channel.
 
-## Event constraints (stated by the organizer brief)
+## Event constraints
 
-- Solo participant; approximately **two hours** to build.
-- Intermittent or absent internet; judges **may enable airplane mode**.
+- Solo participant, ~2 hours of build time.
+- Intermittent or absent internet; judges may enable
+  airplane mode during the demo.
 - No organizer-provided dataset.
-- Submission requires: public GitHub repository, one-line pitch, and an
-  accurate description of what currently works.
-- Stack preference: React + Vite + TypeScript, minimal CSS, local JSON,
-  localStorage, Git/GitHub. No Next.js, backend, hosted DB, remote AI
-  APIs, Android tooling, live maps, or unnecessary dependencies.
+- Submission requires a public GitHub repo, a one-line
+  pitch, and an accurate description of what works.
+- No cloud AI, no hosted databases, no backend, no live
+  data feeds. Local Ollama is permitted if a model is
+  already installed (it is not — see decisions.md).
 
-## MVP scope (P0 — smallest working prototype)
+## MVP scope (P0 — implemented and verified)
 
-1. Responsive app shell that renders with zero network requests.
-2. Home screen with a clearly visible **DEMO MODE** indicator.
-3. Incident (affected-segment) selection area, populated from bundled data.
-4. Destination selection area.
-5. Route-recovery results **placeholder** (engine is P1, not P0).
-6. Visible data-status indicator: data is local/synthetic; live data is
-   not connected.
-7. Friendly empty state when no scenario is selected.
-8. Selection persists across refresh via localStorage, degrading
-   gracefully when storage is unavailable.
+1. Dashboard with complaint counts, pending cases, urgent
+   cases.
+2. Local batch of 12 clearly labelled synthetic complaints
+   (English, Hindi, Gujarati, Gujlish, Hinglish).
+3. Manual complaint entry + selection from the sample batch.
+4. Classification into five departments: Safety,
+   Cleanliness, Fare, Lifts, Staff Behaviour.
+5. Urgency score with visible per-rule reasons.
+6. Editable response draft in the detected language.
+7. Local save; case appears in the correct department queue.
+8. Persistence across reloads.
+9. Offline operation after first load; online/offline
+   indicator; local outbox; JSON export.
+10. Configurable sync adapter with non-duplicating
+    retries; "synced" only after server acknowledgement.
 
-## Non-goals
+## Explicit non-goals
 
-- No live, real-time, or official service-status data.
-- No complete real-world network (explicitly **not** a full
-  Ahmedabad–Gandhinagar network).
-- No verified ETAs, fares, or replacement-bus availability claims.
-- No maps, GPS, Android/native builds, backend, hosted database, or AI APIs.
-- No accounts, no multi-user features, no decorative polish.
+- Real complaint ingestion (no email/WhatsApp/social feeds).
+- Perfect multilingual NLP; human review is assumed.
+- Official severity ratings or legally significant triage.
+- Sending replies through any real channel.
+- Authentication, multi-user roles, analytics, charts, maps.
+- Android/native tooling; any hosted AI service.
 
 ## Acceptance criteria (P0)
 
-- `npm run build` and `npm run preview` succeed; app renders without
-  runtime errors.
-- The shell and demo data load with no network request after first load
-  (bundled assets only; service worker registered in production builds).
-- DEMO MODE badge, data-status pills, and empty state are visible and
-  correct.
-- Selecting an incident + destination updates the results placeholder;
-  the choice survives a page refresh.
-- No text in the UI presents simulated data as live or verified.
+- [x] `npm run build` passes (TypeScript + Vite).
+- [x] First launch seeds exactly 12 synthetic cases; stats
+      read 12 total / 12 pending / 4 urgent.
+- [x] Each sample's language, department, score, and band
+      match the documented expectations (12/12 verified).
+- [x] All four language groups are represented (en, hi, gu,
+      gujlish/hinglish).
+- [x] Manual Gujarati complaint → MR-0001, Lifts, urgency 60.
+- [x] Response edit persists and marks the case unsynced.
+- [x] Reload preserves all cases and edits.
+- [x] Airplane-mode reload after first load renders the full
+      app from cache with the offline indicator.
+- [x] Sync: 404 → permanent failure after 1 attempt;
+      refused → 2 attempts then failure, records retained;
+      2xx → synced with acknowledgement timestamp and
+      Idempotency-Key on every request.
+- [x] Zero console errors across the whole flow.
+- [x] At least one complaint per language group tested.
+
+## Data provenance (facts vs assumptions vs simulated)
+
+- **Verified facts:** the app's own behaviour above
+  (33/33 automated checks; see docs/final-report.md);
+  Node/npm/git versions; Ollama daemon running with
+  models `claude-sonnet-4-5:latest` and `qwen2.5-coder:3b`,
+  and `gemma4:e2b` NOT installed.
+- **Assumptions:** five departments are sufficient for the
+  demo; controller workflow is single-device; a real sync
+  endpoint would deduplicate on Idempotency-Key.
+- **Simulated:** all complaint texts, stations, channels,
+  and response templates are synthetic demo data — no real
+  passenger complaints, no real Ahmedabad metro data, no
+  verified translations.
 
 ## Challenge announcement changes
 
-Reconsider the following **once the official challenge is announced**
-(record decisions in `docs/decisions.md`):
+The challenge is now known (PS-07). Reconsider if the
+organizers publish additional constraints:
 
-- [ ] Is journey recovery still the right problem? Map the announcement
-      to a pattern in `docs/idea-patterns.md` or discard the patterns.
-- [ ] Target user and job-to-be-done.
-- [ ] Required local data schema (stations/edges may need to change).
-- [ ] MVP scope, acceptance criteria, and the P0/P1 split.
-- [ ] Whether demo data must be regenerated for a different city/system.
-
-## Fact ledger
-
-### Verified facts (checked during preparation)
-
-- Working directory was empty; no prior work existed to preserve.
-- Node v24.21.0, npm 11.19.0, git 2.43.0, `gh` CLI (authenticated as
-  RavaniRoshan, SSH, `repo` scope) available.
-- npm registry reachable at preparation time (`npm ping` → PONG).
-
-### Assumptions
-
-- The demonstration environment may be offline after first load.
-- Judges accept clearly-labelled synthetic data; honesty about data
-  provenance is a feature, not a weakness.
-- A browser is available for the demo (PWA, not a native app).
-
-### Simulated data
-
-- All stations, edges, statuses, durations, and scenarios in
-  `src/data/network.json` are synthetic, generated 2026-10-10, and
-  marked `verified: false`. Station names are generic placeholders.
+- If a specific department list or urgency rubric is
+  mandated, replace `URGENCY_RULES` in `src/lib/nlp.ts`
+  and the department union in `src/lib/cases.ts`.
+- If a real sync endpoint is provided, set it in the
+  Sync panel and confirm dedupe on `Idempotency-Key`.
+- If more languages are required, extend the lexicon
+  tables in `src/lib/nlp.ts` (script detection + keywords).
+- If judges require live data ingestion, that is out of
+  scope for this build — flag it, don't fake it.

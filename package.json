@@ -1,9 +1,9 @@
 {
-  "name": "routerelay",
+  "name": "metroresolve",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Offline-first metro journey-recovery web app — hackathon preparation (synthetic demo data only)",
+  "description": "Offline-first metro complaint triage — hackathon prototype (synthetic demo data only)",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
