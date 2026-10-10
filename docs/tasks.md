@@ -52,10 +52,13 @@ implemented and verified**. Definition of done (DoD) is stated per task.
       Acceptance: all files exist and are consistent.
       DoD: reviewed once against the mission brief.
       Verified 2026-10-10: all eight files written and cross-checked.
-- [ ] **Git baseline** — `.gitignore` correct, no secrets staged,
+- [x] **Git baseline** — `.gitignore` correct, no secrets staged,
       meaningful baseline commit on `main`.
       Acceptance: `git status` clean; `git log` shows the commit.
       DoD: commit exists locally; push documented (not executed).
+      Verified 2026-10-10: secret scan clean; commit 2c02008 on
+      `main`; `git status` clean; no remote configured yet —
+      push commands documented in README.md.
 
 ## P1 — improvements only after P0 passes
 
