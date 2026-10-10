@@ -1,0 +1,118 @@
+{
+  "meta": {
+    "title": "RouteRelay synthetic demo network",
+    "source": "synthetic-demo-data",
+    "verified": false,
+    "simulation": true,
+    "generated": "2026-10-10",
+    "notes": "Station names are generic placeholders. This is NOT the real Ahmedabad-Gandhinagar metro network. Durations are synthetic estimates, not measured journey times."
+  },
+  "stations": [
+    { "id": "st01", "name": "Central Station", "lines": ["BL", "GR"] },
+    { "id": "st02", "name": "Museum", "lines": ["BL"] },
+    { "id": "st03", "name": "University", "lines": ["BL"] },
+    { "id": "st04", "name": "Tech Park", "lines": ["BL"] },
+    { "id": "st05", "name": "Old Market", "lines": ["GR"] },
+    { "id": "st06", "name": "Stadium", "lines": ["GR"] },
+    { "id": "st07", "name": "Riverside", "lines": ["GR"] },
+    { "id": "st08", "name": "North Terminal", "lines": ["GR"] }
+  ],
+  "edges": [
+    {
+      "id": "e01",
+      "from": "st01",
+      "to": "st02",
+      "bidirectional": true,
+      "mode": "metro",
+      "status": "normal",
+      "durationMinutes": 3,
+      "durationSource": "synthetic-estimate"
+    },
+    {
+      "id": "e02",
+      "from": "st02",
+      "to": "st03",
+      "bidirectional": true,
+      "mode": "metro",
+      "status": "normal",
+      "durationMinutes": 4,
+      "durationSource": "synthetic-estimate"
+    },
+    {
+      "id": "e03",
+      "from": "st03",
+      "to": "st04",
+      "bidirectional": true,
+      "mode": "metro",
+      "status": "normal",
+      "durationMinutes": null,
+      "durationSource": null
+    },
+    {
+      "id": "e04",
+      "from": "st01",
+      "to": "st05",
+      "bidirectional": true,
+      "mode": "metro",
+      "status": "normal",
+      "durationMinutes": 3,
+      "durationSource": "synthetic-estimate"
+    },
+    {
+      "id": "e05",
+      "from": "st05",
+      "to": "st06",
+      "bidirectional": true,
+      "mode": "metro",
+      "status": "normal",
+      "durationMinutes": 4,
+      "durationSource": "synthetic-estimate"
+    },
+    {
+      "id": "e06",
+      "from": "st06",
+      "to": "st07",
+      "bidirectional": true,
+      "mode": "metro",
+      "status": "normal",
+      "durationMinutes": null,
+      "durationSource": null
+    },
+    {
+      "id": "e07",
+      "from": "st07",
+      "to": "st08",
+      "bidirectional": true,
+      "mode": "metro",
+      "status": "normal",
+      "durationMinutes": 5,
+      "durationSource": "synthetic-estimate"
+    },
+    {
+      "id": "e08",
+      "from": "st03",
+      "to": "st06",
+      "bidirectional": true,
+      "mode": "metro",
+      "status": "normal",
+      "durationMinutes": 6,
+      "durationSource": "synthetic-estimate"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "sc01",
+      "name": "Signal fault — Blue Line (Museum ↔ University)",
+      "description": "Simulated disruption on edge e02. Trains cannot pass between Museum and University until further notice (simulated).",
+      "status": "simulated",
+      "affectedEdges": ["e02"]
+    },
+    {
+      "id": "sc02",
+      "name": "Planned maintenance — Green Line (Stadium ↔ Riverside)",
+      "description": "Simulated closure of edge e06 for maintenance. Plan an alternative via the Blue Line connector (simulated).",
+      "status": "simulated",
+      "affectedEdges": ["e06"]
+    }
+  ]
+}

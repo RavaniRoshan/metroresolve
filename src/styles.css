@@ -1,0 +1,151 @@
+:root {
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --ink: #17222e;
+  --muted: #5c6b7a;
+  --accent: #0f4c81;
+  --accent-soft: #e3eef6;
+  --warn: #8a5a00;
+  --warn-soft: #fdf3d7;
+  --border: #d8e0e8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.shell {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--accent);
+  color: #fff;
+  padding: 14px 18px;
+  border-radius: 12px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.tagline {
+  margin: 2px 0 0;
+  opacity: 0.85;
+  font-size: 0.85rem;
+}
+
+.badge {
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+
+.badge.demo {
+  background: #ffd54a;
+  color: #3a2c00;
+}
+
+.statusbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+
+.pill {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.pill.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: #ecd9a0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 720px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+.panel label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 12px 0 4px;
+}
+
+select {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: #fff;
+  color: var(--ink);
+}
+
+.hint {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.empty,
+.placeholder {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  background: #fbfcfe;
+}
+
+.placeholder p {
+  margin: 6px 0;
+}
+
+.footer {
+  margin-top: 16px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
