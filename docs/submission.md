@@ -119,10 +119,8 @@ still work; the header shows "Offline".
 
 ## Repository
 
-- **URL:** `<PASTE AFTER PUSH>` — prepare with
-  `gh repo create metroresolve --public --source=.
-  --remote=origin --push` (not yet pushed; no remote
-  configured as of preparation).
+- **URL:** https://github.com/RavaniRoshan/metroresolve
+  (public, `main` branch pushed and verified).
 
 ## Machine-readable (for JSON/API forms)
 
@@ -137,6 +135,6 @@ still work; the header shows "Offline".
   "departments": ["Safety", "Cleanliness", "Fare", "Lifts", "Staff Behaviour"],
   "offline": true,
   "dependencies_added": 0,
-  "repo_url": null
+  "repo_url": "https://github.com/RavaniRoshan/metroresolve"
 }
 ```
