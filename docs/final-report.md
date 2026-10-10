@@ -1,6 +1,6 @@
 # Final Report — MetroResolve (PS-07)
 
-Build date: 2026-10-10. Stack: React 18 + Vite +
+Build date: 2026-10-10. Stack: React 19 + Vite +
 TypeScript, zero runtime dependencies beyond React.
 Production build: **PASS** (`npm run build` — tsc clean,
 Vite emits `dist/`: 255.54 kB JS / 7.40 kB CSS, gzip
