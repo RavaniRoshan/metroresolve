@@ -83,7 +83,7 @@ acknowledgement.
 
 ## Tech stack
 
-React 18, Vite, TypeScript, minimal CSS, local JSON,
+React 19, Vite, TypeScript, minimal CSS, local JSON,
 localStorage, service worker. Zero runtime dependencies
 beyond the React toolchain. No backend, no hosted
 database, no cloud AI, no maps, no CDN assets.
@@ -122,6 +122,23 @@ still work; the header shows "Offline".
 - **URL:** https://github.com/RavaniRoshan/metroresolve
   (public, `main` branch pushed and verified).
 
+## Submission record
+
+- **Form:** Metro Hacks Project Submission (Google Forms,
+  DevFest Gandhinagar / GDG Gandhinagar × GDG Cloud Gandhinagar)
+- **Submitted:** 2026-10-10 (UTC), via automated headless
+  browser — every field value read back and verified in the
+  live DOM before the Submit click (14/14 checks), and the
+  confirmation page read "Your response has been recorded."
+- **Answers as submitted:** see the field list above
+  (track = Metro Operations; offline = Fully; demo link left
+  blank — optional, no live site).
+- **Honest disclosures included in "What works right now":**
+  first-load-once caveat for service-worker caching, and
+  prior-work disclosure (React+Vite starter scaffolded
+  before the ride; all triage logic, demo data and docs
+  written during the event).
+
 ## Machine-readable (for JSON/API forms)
 
 ```json
@@ -130,7 +147,7 @@ still work; the header shows "Offline".
   "challenge": "PS-07 — Every Complaint Heard (Metro Operations)",
   "team": "solo",
   "pitch": "MetroResolve — offline-first complaint triage that never lets an urgent passenger complaint get buried, even with the network off.",
-  "stack": ["React 18", "Vite", "TypeScript", "localStorage", "service worker", "local JSON"],
+  "stack": ["React 19", "Vite", "TypeScript", "localStorage", "service worker", "local JSON"],
   "languages_supported": ["English", "Hindi", "Gujarati", "Gujlish", "Hinglish"],
   "departments": ["Safety", "Cleanliness", "Fare", "Lifts", "Staff Behaviour"],
   "offline": true,
