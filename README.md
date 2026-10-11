@@ -1,146 +1,188 @@
+<div align="center">
+
 # MetroResolve
 
-**PS-07: Every Complaint Heard — Metro Operations.**
+**Every Complaint Heard — Metro Operations (PS-07)**
+
 Offline-first complaint triage for a station controller.
 Complaints arrive in Gujarati, Hindi, English, and mixed
-Gujlish/Hinglish. MetroResolve classifies each complaint
-into one of five department queues (Safety, Cleanliness,
-Fare, Lifts, Staff Behaviour), scores urgency with visible
-reasons, drafts an editable reply in the detected language,
-and stores everything locally. It works fully offline after
-first load and syncs through a configurable HTTP endpoint
-when one is provided.
+Gujlish/Hinglish — MetroResolve classifies each one into a
+department queue, scores urgency with visible reasons, and
+drafts an editable reply in the complainant's language.
+Fully on-device. Fully offline after first load.
 
-> All bundled complaint data is **synthetic demo data**.
-> Language detection, classification, and urgency scores
-> are **prototype decision support** — not verified
-> translations and not official operational severity
-> ratings. Drafts are never sent or approved by this app.
+![offline-first](https://img.shields.io/badge/offline--first-PWA-blue)
+![React 19](https://img.shields.io/badge/React-19-61DAFB)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6)
+![Vite](https://img.shields.io/badge/Vite-8-646CFF)
+![zero runtime deps](https://img.shields.io/badge/runtime%20dependencies-zero-brightgreen)
+![Metro Hacks PS-07](https://img.shields.io/badge/Metro%20Hacks-PS--07-FF6F00)
+
+</div>
+
+<br>
+
+![Dashboard — 12 complaints, urgency-first queue](docs/screenshots/01-dashboard.png)
+
+## Highlights
+
+- **Operations dashboard** — total, pending, urgent, and
+  server-acknowledged complaint counts.
+- **Multilingual triage** — 12 labelled synthetic samples in
+  English, Hindi, Gujarati, Gujlish, and Hinglish; script +
+  lexicon detection with an honest confidence note.
+- **Five department queues** — Safety, Cleanliness, Fare,
+  Lifts, Staff Behaviour — with matched keywords shown per
+  case, so every classification is explainable.
+- **Urgency scoring with reasons** — 0–100, nine configurable
+  rules (trapped person +50, fire +50, harm +40, …), every
+  fired rule listed as a visible reason.
+- **Reply drafts in the detected language** — Gujarati /
+  Hindi / English templates; always labelled
+  *DRAFT — not sent, not approved*.
+- **Offline-first PWA** — service-worker shell cache; after
+  one online load the entire workflow runs with zero network.
+- **Honest sync** — configurable HTTP endpoint, idempotency
+  keys, backoff retries; "synced" appears only after a real
+  2xx server acknowledgement. Until then: local outbox +
+  JSON export.
+- **Optional local Ollama adapter** — off by default,
+  localhost-only, never blocks the rule-based engine.
 
 ## Quickstart
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # http://localhost:5173  (dev, hot reload)
 npm run build      # TypeScript check + production build → dist/
-npm run preview    # serve the production build → http://localhost:4173
+npm run preview    # http://localhost:4173  (production build)
 ```
 
-## What works (verified — see docs/final-report.md)
+No runtime dependencies beyond the React toolchain. No
+backend, no hosted database, no external APIs, no CDN
+fonts or assets.
 
-- Operations dashboard: total complaints, pending cases,
-  urgent cases, server-acknowledged count.
-- Local batch of 12 clearly labelled synthetic complaints
-  covering English, Hindi, Gujarati, Gujlish and Hinglish,
-  seeded on first launch.
-- Manual complaint entry (any supported language) and
-  one-click loading of any sample.
-- Deterministic rule-based classification into the five
-  departments, with matched keywords visible per case.
-- Urgency score (0–100) with per-rule reasons and band
-  (urgent ≥ 65, high ≥ 40, normal ≥ 20, low < 20).
-- Editable response draft in the detected language
-  (Gujarati/Hindi/English templates; Gujlish/Hinglish get
-  the English template with an explicit note).
-- Department queue filters; urgency-first ordering.
-- localStorage persistence across reloads; graceful
-  fallback if storage is unavailable.
-- Online/offline indicator; local outbox of unsynced
-  records; JSON export.
-- Sync adapter: configurable endpoint, `Idempotency-Key`
-  per case (server-side dedupe), retries with backoff for
-  network errors/429/5xx, permanent failure on other 4xx.
-  "Synced" is shown only after a real 2xx acknowledgement.
-- Optional local Ollama adapter (localhost only, off by
-  default). The rule-based engine remains active always.
-- Service worker caches the app shell; after one online
-  load the app renders with the network disabled.
+## Demo walkthrough (≈3 minutes)
 
-## Architecture note
+1. **Dashboard** — 12 complaints, 12 pending, 4 urgent,
+   outbox "12 unsynced".
+2. **Open SAMPLE-03** — Gujarati lift complaint → Lifts,
+   urgency **70 URGENT**, reasons *person trapped* +
+   *urgent language*, Gujarati draft labelled
+   *DRAFT — not sent, not approved*.
+3. **Add a manual complaint** — paste Gujarati, Hindi, or
+   Gujlish text → MR-0001 classified into a department
+   queue with its own reasons.
+4. **Edit the draft → Save response locally** — case
+   marked unsynced, outbox count increments.
+5. **Hard-reload** — every case and edit persists.
+6. **DevTools → Network → Offline → hard-reload** — the
+   full app still works; the header shows **Offline**.
+7. **Export JSON** — downloads every case.
 
-```
-src/App.tsx            dashboard, queues, detail panel, sync UI
-src/main.tsx           mount + production-only SW registration
-src/lib/nlp.ts         language detection, department classifier,
-                       urgency rules, reply templates
-src/lib/cases.ts       CaseRecord model, factory, id sequence
-src/lib/storage.ts     safe localStorage wrapper (JSON + fallback)
-src/lib/sync.ts        HTTP sync adapter (idempotent, retrying)
-src/lib/ollama.ts      optional local Ollama inference adapter
-src/lib/data.ts        RouteRelay-era accessor (unused, kept)
-src/data/complaints.json  12 synthetic complaints + stations/channels
-src/data/network.json     RouteRelay-era demo data (unused, kept)
-public/sw.js           shell cache service worker (metroresolve-shell-v1)
-```
+![Detail panel — source text, language, category, score, reasons, draft](docs/screenshots/02-detail-panel.png)
 
-Data flows: bundled JSON → deterministic classifier →
-CaseRecord → localStorage (single source of truth) → UI.
-Sync is an overlay: records stay local until a configured
-endpoint acknowledges them. No network request is needed to
-render the shell, load data, classify, triage, or persist.
-
-## Offline test (production build)
+## Offline verification
 
 ```bash
 npm run build && npm run preview
-# 1. Open http://localhost:4173 once while online (SW caches the shell).
-# 2. Chrome DevTools → Application → Service Workers → "Offline" ticked,
-#    or Network → "Offline" checkbox.
-# 3. Hard-reload (Ctrl/Cmd+Shift+R). The dashboard, all 12+ cases,
-#    triage, editing, and local save must all still work.
-# 4. The header must show "Offline" and the unsynced-record count.
+# 1. Open http://localhost:4173 once while online
+#    (the service worker caches the app shell).
+# 2. DevTools → Application → Service Workers: worker active;
+#    Application → Cache Storage: metroresolve-shell-v1 present.
+# 3. DevTools → Network → Offline → hard-reload.
+# 4. Dashboard, triage, editing, local save, and export all work.
 ```
 
-An automated CDP harness (33 checks) was used during
-development; see `docs/validation.md`.
+![Offline mode — full dashboard with no network](docs/screenshots/03-offline.png)
 
-## Demo script (≈3 minutes)
+## Architecture
 
-1. Dashboard shows 12 complaints, 12 pending, 4 urgent.
-2. Click **SAMPLE-03** — Gujarati lift complaint: Lifts,
-   urgency 70 (URGENT), reasons "person trapped" +
-   "urgent language", Gujarati draft labelled
-   "DRAFT — not sent, not approved".
-3. Add a manual Gujarati complaint → MR-0001, classified
-   Lifts, urgency 60, appears in the queue.
-4. Edit the draft, "Save response locally" — marked
-   unsynced, outbox count increments.
-5. Hard-reload — the case and edited draft persist.
-6. DevTools Offline → hard-reload — everything still works.
-7. Export JSON — downloads all cases.
-
-## Assumptions
-
-- Complaint text is synthetic; no real passenger data.
-- Language detection is a script/lexicon heuristic —
-  fully romanized Gujlish/Hinglish is indistinguishable
-  from English by design (see docs/decisions.md).
-- Urgency rules are configurable in `src/lib/nlp.ts`
-  (`URGENCY_RULES`); scores are decision support only.
-- A real sync endpoint must deduplicate on the
-  `Idempotency-Key` header; no endpoint is configured
-  out of the box, so records are retained locally and
-  JSON export is the sharing path.
-- First load must be online once so the service worker
-  can cache the shell; every subsequent load works offline.
-- Ollama adapter is optional and off by default; the
-  expected model (`gemma4:e2b`) is not installed in this
-  environment, so the rule-based engine is the active one.
-
-## GitHub (not yet pushed)
-
-The repository is prepared locally with baseline commits on
-`main`. When internet is available:
-
-```bash
-gh repo create metroresolve --public --source=. --remote=origin --push
+```
+src/App.tsx               dashboard, queues, detail panel, sync UI
+src/main.tsx              mount + production-only SW registration
+src/lib/nlp.ts            language detection, classifier, urgency
+                          rules, reply templates
+src/lib/cases.ts          CaseRecord model, factory, id sequence
+src/lib/storage.ts        safe localStorage wrapper (JSON + fallback)
+src/lib/sync.ts           HTTP sync adapter (idempotent, retrying)
+src/lib/ollama.ts         optional local Ollama inference adapter
+src/data/complaints.json  12 synthetic complaints + stations/channels
+public/sw.js              shell cache service worker
+docs/                     requirements, design, tasks, validation,
+                          decisions, final report, submission pack
 ```
 
-## Project docs
+Bundled JSON is imported at build time — zero network
+requests to render the shell or load data. localStorage is
+the single source of truth for case state; sync is an
+overlay on each `CaseRecord`, never a second store.
 
-- `docs/requirements.md` — problem, user, scope, acceptance
-- `docs/design.md` — architecture and data model
-- `docs/tasks.md` — prioritized task list (P0 done)
-- `docs/validation.md` — test procedures
-- `docs/decisions.md` — architectural decisions and reasons
-- `docs/final-report.md` — tested / untested / limitations
+### Sync semantics
+
+| Server response | Behaviour |
+|---|---|
+| 2xx | `synced` + `acknowledgedAt` — the only path that ever claims synced |
+| 4xx (except 429) | permanent `failed` after 1 attempt — retrying cannot fix it |
+| network error / 429 / 5xx | retry with backoff up to `maxAttempts`, then `failed`; record retained |
+
+Every POST carries `Idempotency-Key: <case.id>` so a retry
+can never duplicate a record — a real endpoint must honour
+the header. No endpoint is configured out of the box.
+
+## Data & honesty labels
+
+- All bundled complaint data is **synthetic demo data** —
+  no real passenger complaints, no live service status.
+- Language detection is a heuristic; fully romanized
+  Gujlish/Hinglish is indistinguishable from English, and
+  the app says so per-case.
+- Urgency scores are **prototype decision support**, not
+  official operational severity ratings.
+- Drafts are templates — editable, never sent, never
+  approved by this app.
+- First load must be online once so the service worker can
+  cache the shell; every later load works offline.
+
+## Validation (production build)
+
+Verified by a 33-check automated CDP harness plus targeted
+diagnostics — full procedures in
+[docs/validation.md](docs/validation.md):
+
+- seed → 12 cases, stats 12/12/4/0 · 12/12 sample
+  classifications across all four language groups
+- manual entry (Gujarati → MR-0001, Lifts, 60) · response
+  editing · reload persistence
+- offline render from SW cache with Offline indicator
+- sync paths: 404 → fail after 1 attempt · refused →
+  2 attempts then fail, records retained · 2xx → all synced
+  with idempotency keys on every request
+- Ollama check: daemon detected, `gemma4:e2b` correctly
+  reported not installed · JSON export · zero console errors
+
+## Docs
+
+| Document | Contents |
+|---|---|
+| [requirements.md](docs/requirements.md) | problem, user, scope, acceptance criteria |
+| [design.md](docs/design.md) | architecture, data model, triage flow |
+| [tasks.md](docs/tasks.md) | P0 (done) / P1 / P2 task list |
+| [validation.md](docs/validation.md) | automated + manual test procedures |
+| [decisions.md](docs/decisions.md) | architectural decisions and reasons |
+| [final-report.md](docs/final-report.md) | tested / untested / known limitations |
+| [submission.md](docs/submission.md) | Metro Hacks submission pack + record |
+
+## Metro Hacks submission
+
+Submitted 2026-10-10 for **PS-07 — Every Complaint Heard**
+(Metro Operations track), DevFest Gandhinagar. The form
+response was recorded after all fields were verified in the
+live DOM. See [docs/submission.md](docs/submission.md) for
+the exact answers as submitted.
+
+---
+
+<sub>Built for Metro Hacks on board the Gujarat Metro.
+All demo data is synthetic; urgency scores and drafts are
+decision support, not official ratings or sent messages.</sub>
